@@ -1,24 +1,9 @@
-terraform {
-  required_version = ">= 1.5.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
-    }
-  }
-}
-
-# ⚠️ Cost Explorer / CE APIs viven en us-east-1.
-provider "aws" {
-  region = var.region_ce
-}
-
 # ========== SNS para notificaciones ==========
 resource "aws_sns_topic" "cost_anomaly_topic" {
   name = var.sns_topic_name
 }
 
-# Opción A: suscriptor por EMAIL (simple)
+# (Opcional) Suscripción por email
 resource "aws_sns_topic_subscription" "email_sub" {
   count     = var.alert_to_email != "" ? 1 : 0
   topic_arn = aws_sns_topic.cost_anomaly_topic.arn
@@ -26,43 +11,48 @@ resource "aws_sns_topic_subscription" "email_sub" {
   endpoint  = var.alert_to_email
 }
 
-# (Opcional) Opción B: si usas AWS Chatbot con Slack/Teams,
-# suscríbelo a este topic desde la consola de Chatbot y omite email_sub.
-
-# ========== MONITOR 1: por SERVICIO (DIMENSIONAL/SERVICE) ==========
+# ========== Monitor 1: por Servicio ==========
 resource "aws_ce_anomaly_monitor" "by_service" {
   name              = "anomaly-by-service"
   monitor_type      = "DIMENSIONAL"
   monitor_dimension = "SERVICE"
 }
 
-# ========== MONITOR 2: por TAG (CUSTOM/TAG:<clave>) ==========
-# Requiere que recursos estén etiquetados y que la clave exista en Cost Explorer
+# ========== Monitor 2: por TAG (opcional) ==========
+# Formato para TAG en CE: "TAG_KEY$TAG_VALUE"
 resource "aws_ce_anomaly_monitor" "by_tag" {
-  count         = var.enable_tag_monitor ? 1 : 0
-  name          = "anomaly-by-tag-${var.tag_key}-${var.tag_value}"
-  monitor_type  = "CUSTOM"
-  # Agrupa por clave de tag y filtra por valor
+  count        = var.enable_tag_monitor ? 1 : 0
+  name         = "anomaly-by-tag-${var.tag_key}-${var.tag_value}"
+  monitor_type = "CUSTOM"
+
   monitor_specification = jsonencode({
     Dimensions = {
       Key    = "TAG"
-      Values = ["${var.tag_key}$${var.tag_value}"] # formato TAG_KEY$TAG_VALUE
+      Values = ["${var.tag_key}$${var.tag_value}"]
     }
   })
 }
 
-# ========== SUSCRIPCIÓN (alertas) ==========
+# ========== Suscripción (alertas) ==========
 resource "aws_ce_anomaly_subscription" "sub" {
-  name             = "cost-anomaly-subscription"
-  # Umbral en USD del impacto previsto de la anomalía (ej.: 50 USD)
-  threshold        = var.threshold_usd
-  frequency        = var.frequency # DAILY | WEEKLY | IMMEDIATE
-  monitor_arn_list = compact([
-    aws_ce_anomaly_monitor.by_service.arn,
-    length(aws_ce_anomaly_monitor.by_tag) > 0 ? aws_ce_anomaly_monitor.by_tag[0].arn : ""
-  ])
+  name      = "cost-anomaly-subscription"
+  frequency = var.frequency # DAILY | WEEKLY | IMMEDIATE
 
-  # A SNS topic (recomendado)
+  # Incluye el monitor por servicio y, si está activo, el de TAG
+  monitor_arn_list = concat(
+    [aws_ce_anomaly_monitor.by_service.arn],
+    var.enable_tag_monitor ? [aws_ce_anomaly_monitor.by_tag[0].arn] : []
+  )
+
+  # Umbral ABSOLUTO en USD (para porcentaje usa ANOMALY_TOTAL_IMPACT_PERCENTAGE)
+  threshold_expression {
+    dimension {
+      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+      match_options = ["GREATER_THAN_OR_EQUAL"]
+      values        = [tostring(var.threshold_usd)] # ej: "50"
+    }
+  }
+
   subscriber {
     type    = "SNS"
     address = aws_sns_topic.cost_anomaly_topic.arn
