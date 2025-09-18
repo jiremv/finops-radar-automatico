@@ -11,15 +11,15 @@ variable "sns_topic_name" {
 }
 
 variable "alert_to_email" {
-  description = "Email para recibir alertas (dejar vacío si no deseas email)"
+  description = "Email para recibir alertas (obligatorio si usas DAILY/WEEKLY, dejar vacío si no deseas email)"
   type        = string
-  default     = ""
+  default     = "paulrivera34@gmail.com"
 }
 
 variable "threshold_usd" {
   description = "Umbral (USD) de impacto previsto para alertar"
   type        = number
-  default     = 50
+  default     = 25
 }
 
 variable "frequency" {

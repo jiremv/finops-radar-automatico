@@ -1,7 +1,7 @@
-output "sns_topic_arn" {
-  value       = aws_sns_topic.cost_anomaly_topic.arn
-  description = "ARN del SNS topic de alertas"
-}
+#output "sns_topic_arn" {
+#  value       = aws_sns_topic.cost_anomaly_topic.arn
+#  description = "ARN del SNS topic de alertas"
+#}
 
 output "monitor_by_service_arn" {
   value       = aws_ce_anomaly_monitor.by_service.arn

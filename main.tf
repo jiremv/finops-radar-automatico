@@ -1,15 +1,15 @@
-# ========== SNS para notificaciones ==========
-resource "aws_sns_topic" "cost_anomaly_topic" {
-  name = var.sns_topic_name
-}
+## ========== SNS para notificaciones ==========
+#resource "aws_sns_topic" "cost_anomaly_topic" {
+#  name = var.sns_topic_name
+#}
 
-# (Opcional) Suscripción por email
-resource "aws_sns_topic_subscription" "email_sub" {
-  count     = var.alert_to_email != "" ? 1 : 0
-  topic_arn = aws_sns_topic.cost_anomaly_topic.arn
-  protocol  = "email"
-  endpoint  = var.alert_to_email
-}
+## (Opcional) Suscripción por email
+#resource "aws_sns_topic_subscription" "email_sub" {
+#  count     = var.alert_to_email != "" ? 1 : 0
+#  topic_arn = aws_sns_topic.cost_anomaly_topic.arn
+#  protocol  = "email"
+#  endpoint  = var.alert_to_email
+#}
 
 # ========== Monitor 1: por Servicio ==========
 resource "aws_ce_anomaly_monitor" "by_service" {
@@ -44,7 +44,8 @@ resource "aws_ce_anomaly_subscription" "sub" {
     var.enable_tag_monitor ? [aws_ce_anomaly_monitor.by_tag[0].arn] : []
   )
 
-  # Umbral ABSOLUTO en USD (para porcentaje usa ANOMALY_TOTAL_IMPACT_PERCENTAGE)
+  # Umbral ABSOLUTO en USD (para porcentaje usar ANOMALY_TOTAL_IMPACT_PERCENTAGE)
+  # se puede ajustar el valor con var.threshold_usd
   threshold_expression {
     dimension {
       key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
@@ -53,8 +54,13 @@ resource "aws_ce_anomaly_subscription" "sub" {
     }
   }
 
+ # ÚNICO subscriber: EMAIL (requerido para DAILY/WEEKLY)
   subscriber {
-    type    = "SNS"
-    address = aws_sns_topic.cost_anomaly_topic.arn
+    type    = "EMAIL"
+    address = var.alert_to_email
   }
+  #subscriber {
+  #  type    = "SNS"
+  #  address = aws_sns_topic.cost_anomaly_topic.arn
+  #}
 }
